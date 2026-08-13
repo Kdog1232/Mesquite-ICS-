@@ -5,10 +5,12 @@ import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/
 import { grades, students, type Student } from '@/data/students';
 import { supabase } from '@/lib/supabase';
 import { StudentCard } from './student-card';
+import { DestinationSelector } from './destination-selector';
+import { DESTINATIONS, destinationDetails, isDestination, type Destination } from '@/lib/destinations';
 
 export type StudentStatus = 'IN' | 'OUT';
-export type LiveStatus = { status: StudentStatus; outAt: string | null; updatedAt: string };
-type StatusRow = { student_id: string; status: StudentStatus; out_at: string | null; updated_at: string };
+export type LiveStatus = { status: StudentStatus; destination: Destination | null; outAt: string | null; updatedAt: string };
+type StatusRow = { student_id: string; status: StudentStatus; destination: Destination | null; out_at: string | null; updated_at: string };
 type Statuses = Record<string, LiveStatus>;
 type View = 'ALL' | 'OUT' | (typeof grades)[number];
 type Section = 'ALL' | '6A' | '6B' | '8A' | '8B';
@@ -20,7 +22,7 @@ const OFFLINE_AFTER_MS = 10_000;
 function validRow(value: unknown): value is StatusRow {
   if (!value || typeof value !== 'object') return false;
   const row = value as Partial<StatusRow>;
-  return typeof row.student_id === 'string' && (row.status === 'IN' || row.status === 'OUT') && typeof row.updated_at === 'string';
+  return typeof row.student_id === 'string' && (row.status === 'IN' || row.status === 'OUT') && (row.destination === null || isDestination(row.destination)) && typeof row.updated_at === 'string';
 }
 
 export function formatElapsed(seconds: number) {
@@ -41,11 +43,12 @@ export function Dashboard() {
   const [view, setView] = useState<View>('PK');
   const [query, setQuery] = useState('');
   const [section, setSection] = useState<Section>('ALL');
+  const [selectingDestination, setSelectingDestination] = useState<Student | null>(null);
 
-  const applyRows = useCallback((rows: StatusRow[]) => setStatuses(Object.fromEntries(rows.filter(validRow).map(row => [row.student_id, { status: row.status, outAt: row.out_at, updatedAt: row.updated_at }]))), []);
+  const applyRows = useCallback((rows: StatusRow[]) => setStatuses(Object.fromEntries(rows.filter(validRow).map(row => [row.student_id, { status: row.status, destination: row.destination, outAt: row.out_at, updatedAt: row.updated_at }]))), []);
   const refetch = useCallback(async () => {
     if (!supabase) { setLoadState('error'); return false; }
-    const { data, error } = await supabase.from('student_status').select('student_id,status,out_at,updated_at');
+    const { data, error } = await supabase.from('student_status').select('student_id,status,destination,out_at,updated_at');
     if (error) { setLoadState('error'); return false; }
     applyRows((data ?? []) as StatusRow[]); setLoadState('ready'); return true;
   }, [applyRows]);
@@ -64,7 +67,7 @@ export function Dashboard() {
     const receive = (payload: RealtimePostgresChangesPayload<StatusRow>) => {
       if (!validRow(payload.new)) return;
       const row = payload.new;
-      setStatuses(current => ({ ...current, [row.student_id]: { status: row.status, outAt: row.out_at, updatedAt: row.updated_at } }));
+      setStatuses(current => ({ ...current, [row.student_id]: { status: row.status, destination: row.destination, outAt: row.out_at, updatedAt: row.updated_at } }));
     };
 
     const clearReconnectTimers = () => {
@@ -122,9 +125,12 @@ export function Dashboard() {
     };
   }, [refetch]);
 
-  const statusFor = useCallback((id: string): LiveStatus => statuses[id] ?? { status: 'IN', outAt: null, updatedAt: '' }, [statuses]);
+  const statusFor = useCallback((id: string): LiveStatus => statuses[id] ?? { status: 'IN', destination: null, outAt: null, updatedAt: '' }, [statuses]);
   const elapsedFor = useCallback((id: string) => { const start = statusFor(id).outAt; return start ? Math.max(0, (now - new Date(start).getTime()) / 1000) : 0; }, [now, statusFor]);
   const outCount = students.filter(student => statusFor(student.id).status === 'OUT').length;
+  const outStudents = useMemo(() => students.filter(student => statusFor(student.id).status === 'OUT').sort((a, b) => elapsedFor(b.id) - elapsedFor(a.id)), [elapsedFor, statusFor]);
+  const destinationCounts = useMemo(() => Object.fromEntries(DESTINATIONS.map(destination => [destination, outStudents.filter(student => statusFor(student.id).destination === destination).length])) as Record<Destination, number>, [outStudents, statusFor]);
+  const restroomStudents = outStudents.filter(student => statusFor(student.id).destination === 'RESTROOM');
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     const result = needle ? students.filter(student => student.name.toLocaleLowerCase().includes(needle))
@@ -133,14 +139,24 @@ export function Dashboard() {
     return [...result].sort((a, b) => view === 'OUT' ? elapsedFor(b.id) - elapsedFor(a.id) : a.name.localeCompare(b.name));
   }, [elapsedFor, query, section, statusFor, view]);
 
-  async function toggle(student: Student) {
+  async function setStatus(student: Student, destination: Destination | null) {
     if (!supabase || updating.has(student.id)) return;
-    const next = statusFor(student.id).status === 'IN' ? 'OUT' : 'IN';
+    const next = destination ? 'OUT' : 'IN';
     setUpdating(current => new Set(current).add(student.id)); setUpdateError('');
-    const { error } = await supabase.rpc('set_student_hallway_status', { p_student_id: student.id, p_status: next, p_student_name: student.name, p_grade: student.grade, p_section: student.section ?? null });
+    const { error } = await supabase.rpc('set_student_hallway_status', { p_student_id: student.id, p_status: next, p_destination: destination, p_student_name: student.name, p_grade: student.grade, p_section: student.section ?? null });
     if (error) setUpdateError('Unable to update live status. Please try again.');
     else await refetch();
     setUpdating(current => { const copy = new Set(current); copy.delete(student.id); return copy; });
+  }
+  function toggle(student: Student) {
+    if (statusFor(student.id).status === 'IN') setSelectingDestination(student);
+    else void setStatus(student, null);
+  }
+  function chooseDestination(destination: Destination) {
+    const student = selectingDestination;
+    if (!student) return;
+    setSelectingDestination(null);
+    void setStatus(student, destination);
   }
   function select(next: View) { setView(next); setQuery(''); setSection('ALL'); }
 
@@ -153,12 +169,15 @@ export function Dashboard() {
       ? { className: 'bg-amber-100 text-amber-900', label: 'RECONNECTING... ●' }
       : { className: 'bg-red-100 text-red-900', label: 'CAMPUS STATUS OFFLINE ●' };
   return <main className="mx-auto max-w-6xl p-4 sm:p-6">
+    {selectingDestination && <DestinationSelector studentName={selectingDestination.name} busy={updating.has(selectingDestination.id)} onSelect={chooseDestination} onCancel={() => setSelectingDestination(null)} />}
     <div role="status" aria-live="polite" className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-black ${connectionIndicator.className}`}>{connectionIndicator.label}</div>
     {updateError && <p role="alert" className="mb-4 rounded-lg bg-red-100 p-4 font-black text-red-900">{updateError}</p>}
+    <section aria-label="Live destination totals" className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8"><button onClick={() => select('OUT')} className="rounded-xl bg-red-700 p-3 text-left text-white shadow"><span className="block text-xs font-black">CURRENTLY OUT</span><span className="text-2xl font-black">{outCount}</span></button>{DESTINATIONS.map(destination => <div key={destination} className="rounded-xl bg-white p-3 shadow"><span className="block truncate text-xs font-black uppercase text-slate-600">{destinationDetails[destination].icon} {destinationDetails[destination].label}</span><span className="text-2xl font-black text-navy">{destinationCounts[destination]}</span></div>)}</section>
+    <section className="mb-5 rounded-xl border-2 border-blue-700 bg-blue-50 p-4 shadow-card"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-xl font-black text-navy">🚻 RESTROOM STATUS</h2><p className="font-black text-blue-900">{restroomStudents.length} {restroomStudents.length === 1 ? 'STUDENT' : 'STUDENTS'} CURRENTLY OUT</p></div>{restroomStudents.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{restroomStudents.map(student => <div key={student.id} className="flex items-center justify-between rounded-lg bg-white p-3"><div><p className="font-black">{student.name}</p><p className="text-sm font-semibold text-slate-600">Grade {student.grade}</p></div><p className="font-mono text-lg font-black text-red-800">{formatElapsed(elapsedFor(student.id))}</p></div>)}</div> : <p className="mt-2 text-sm font-semibold text-slate-600">No students are currently out to the restroom.</p>}</section>
     <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]"><label><span className="sr-only">Search student</span><input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search Student..." className="min-h-14 w-full rounded-xl border border-slate-300 bg-white px-5 text-lg shadow-sm" /></label><button onClick={() => select('OUT')} className="min-h-14 rounded-xl bg-red-700 px-7 text-lg font-black text-white shadow-md">CURRENTLY OUT: {outCount}</button></div>
     <nav aria-label="Select grade" className="mb-6 rounded-xl bg-white p-4 shadow-card"><div className="grid grid-cols-4 gap-2 sm:grid-cols-8"><button onClick={() => select('ALL')} className={`grade-button ${view === 'ALL' ? 'grade-button-active' : ''}`}>ALL</button>{grades.map(grade => <button key={grade} onClick={() => select(grade)} className={`grade-button ${view === grade ? 'grade-button-active' : ''}`}>{grade}</button>)}</div></nav>
     {(view === '6' || view === '8') && !query && <nav aria-label={`Filter Grade ${view} by section`} className="mb-6 flex gap-2">{(['ALL', `${view}A`, `${view}B`] as Section[]).map(option => <button key={option} onClick={() => setSection(option)} className={`grade-button min-w-20 ${section === option ? 'grade-button-active' : ''}`}>{option}</button>)}</nav>}
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-black text-navy">{title} — {visible.length}</h1>{view === 'OUT' && <button onClick={() => select('PK')} className="rounded-lg border-2 border-navy px-4 py-2 font-bold text-navy">Return to grade view</button>}</div>
-    <div className="grid gap-3">{visible.map(student => <StudentCard key={student.id} student={student} status={statusFor(student.id).status} elapsedSeconds={elapsedFor(student.id)} showGrade={Boolean(query) || view === 'OUT' || view === 'ALL'} updating={updating.has(student.id)} onToggle={() => void toggle(student)} />)}{!visible.length && <div className="rounded-xl border border-dashed bg-white p-10 text-center text-slate-500">No matching students.</div>}</div>
+    <div className="grid gap-3">{visible.map(student => <StudentCard key={student.id} student={student} status={statusFor(student.id).status} destination={statusFor(student.id).destination} elapsedSeconds={elapsedFor(student.id)} showGrade={Boolean(query) || view === 'OUT' || view === 'ALL'} updating={updating.has(student.id)} onToggle={() => toggle(student)} />)}{!visible.length && <div className="rounded-xl border border-dashed bg-white p-10 text-center text-slate-500">No matching students.</div>}</div>
   </main>;
 }
