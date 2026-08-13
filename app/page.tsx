@@ -1,2 +1,4 @@
-import {redirect} from 'next/navigation';import {Header} from '@/components/header';import {Dashboard} from '@/components/dashboard';import {createClient,getRole,requireUser} from '@/lib/supabase/server';import type {Role,Student} from '@/lib/types';
-export default async function Home(){if(!await requireUser())redirect('/login');const role=await getRole();if(!role)redirect('/login?error=unauthorized');const {data,error}=await createClient().from('students').select('id,first_name,last_name,grade,section,active,student_status(student_id,status,out_since,updated_at,updated_by)').eq('active',true).order('last_name').order('first_name');if(error)throw new Error('Unable to load authorized roster.');return <><Header role={role as Role}/><Dashboard initialStudents={data as unknown as Student[]} role={role as Role}/></>}
+import { Dashboard } from '@/components/dashboard';
+import { Header } from '@/components/header';
+
+export default function Home() { return <><Header/><Dashboard/></>; }

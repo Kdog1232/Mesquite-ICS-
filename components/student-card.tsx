@@ -1,2 +1,15 @@
-'use client';import {AlertTriangle,Clock} from 'lucide-react';import type {Student} from '@/lib/types';import {formatTime,isPriorDay,minutesOut} from '@/lib/time';import {StatusToggle} from './status-toggle';
-export function StudentCard({student,now,busy,onToggle,isAdmin}:{student:Student;now:number;busy:boolean;onToggle:()=>void;isAdmin:boolean}){const status=student.student_status?.status??'IN',out=status==='OUT',mins=minutesOut(student.student_status?.out_since??null,now),stale=isPriorDay(student.student_status?.out_since??null);return <article className={`rounded-xl border-2 p-4 shadow-card sm:flex sm:items-center sm:justify-between ${out?mins>=15?'border-red-500 bg-red-50':mins>=10?'border-amber-400 bg-amber-50':'border-red-200 bg-white':'border-transparent bg-white'}`}><div><h2 className="text-lg font-bold">{student.last_name}, {student.first_name}</h2><p className="text-sm text-slate-600">Grade {student.grade} <span aria-hidden>•</span> {student.section||'No section'}</p>{out&&<div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold"><span className="flex items-center gap-1"><Clock size={16}/>Out since: {formatTime(student.student_status?.out_since??null)}</span><span>Out for: {mins} min</span>{mins>=10&&<span className={`flex items-center gap-1 font-black ${mins>=15?'text-red-800':'text-amber-800'}`}><AlertTriangle size={17}/> {mins>=15?'ALERT':'WARNING'}: OUT {mins} MINUTES</span>}{stale&&isAdmin&&<span className="w-full font-black text-red-900">STALE STATUS — OUT SINCE A PRIOR DAY</span>}</div>}</div><div className="mt-4 sm:ml-4 sm:mt-0"><StatusToggle name={`${student.first_name} ${student.last_name}`} status={status} disabled={busy} onChange={onToggle}/></div></article>}
+'use client';
+
+import type { Student } from '@/data/students';
+import { formatTime, minutesOut } from '@/lib/time';
+import type { StudentStatus } from './dashboard';
+import { StatusToggle } from './status-toggle';
+
+export function StudentCard({ student, status, now, onToggle }: { student: Student; status: StudentStatus; now: number; onToggle: () => void }) {
+  const out = status.status === 'OUT';
+  const minutes = minutesOut(status.outSince, now);
+  return <article className={`rounded-xl border-2 p-4 shadow-card sm:flex sm:items-center sm:justify-between ${out ? minutes >= 15 ? 'border-red-500 bg-red-50' : minutes >= 10 ? 'border-amber-400 bg-amber-50' : 'border-red-200 bg-white' : 'border-transparent bg-white'}`}>
+    <div><h2 className="text-lg font-black uppercase">{student.firstName} {student.lastName}</h2><p className="text-sm text-slate-600">Grade {student.grade} <span aria-hidden>•</span> {student.section || 'No section'}</p><p className={`mt-2 font-black ${out ? 'text-red-800' : 'text-emerald-800'}`}>STATUS: {status.status}</p>{out && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold"><span>Out Since: {formatTime(status.outSince)}</span><span>Out For: {minutes} Minute{minutes === 1 ? '' : 's'}</span>{minutes >= 10 && <span className={`font-black ${minutes >= 15 ? 'text-red-800' : 'text-amber-800'}`}>⚠ {minutes >= 15 ? 'ATTENTION — OUT 15+ MINUTES' : 'OUT 10+ MINUTES'}</span>}</div>}</div>
+    <div className="mt-4 sm:ml-4 sm:mt-0"><StatusToggle name={`${student.firstName} ${student.lastName}`} status={status.status} disabled={false} onChange={onToggle}/></div>
+  </article>;
+}
