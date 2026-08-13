@@ -65,6 +65,44 @@ const roster: Roster = {
     'Alexia Alvina-Gonzalez', 'Alexander Delarosa', 'Michael Rogers', 'Kevin Garcia', 'Natalie Luna',
     'Anthony Silva', 'Madylynn Mendoza',
   ],
+  '6A': [
+    'Alexandra Alonso', 'Mateo Benitez', 'Kendra Flores-DeSantiago', 'Hector Gonzalez-Laureano',
+    'Zaylee Hamilton', 'Vivienne Harris-Guerra', 'Daleyza Hernandez', 'Sabine Jimenez',
+    'Jacob Moreno', 'Damian Rodriguez', 'Haylee Tavera', 'Jade Llanas',
+    'Nathalia Rodriguez-Sequera', 'Liosmel Ortega', 'Alex Rojas', 'Devin Roberson',
+    'Jayden Acevedo Adame', 'Diego Borjas', 'Dakarion Forest', 'Kyrie Harris',
+  ],
+  '6B': [
+    'Alberto Benitez', 'Evelyn Galindo', 'Ramses Gonzales', 'Abigail Gonzales-Cervantez',
+    'Trinity Johnson', 'Camila Molina', 'Ezequiel Perez', 'Anelie Pinales',
+    'Matthew Quintero', 'Dylan Tabora-Molina', 'Ethan Torres', 'Jacob Ulloa', 'Ridlee Lopez',
+    'Daniella Romero', 'Fatima Alsamahi', 'Lindsay Luna', 'Peyton Harris', 'Gianna Jeronimo',
+    'Cayden Pearson', 'Sophia Rodriguez Sequera',
+  ],
+  '7A': [
+    'Vonnie Alanis', 'Elisa Benitez', 'Brayden Bertram', 'Paola Chavez', 'Evelyn Robles',
+    'Joshua Farrar', 'Kenneth Gonzalez', 'Bryzon Grant', 'Matthew Mendoza', 'Alexa Perez',
+    'Samuel Williamson', 'Blake Ayala', 'Danica Dominguez', 'Jesus Lara-Garcia',
+    'Jose Rodriguez-Lopez', 'Angel Martinez', 'Preston Kramer', "Ja'Kaylen Allen", 'Allen Bradley',
+    'Alana Clark', 'Jeremiah Clement', 'Markus Colbert', 'Arianna Corralejo', 'Susana Frias',
+    'Brayden King', 'Jay Ortiz', 'Keyner Perez', 'Carlos Revimar', 'Sofia Rivas-Alvarenga',
+    'Evelyn De La Cruz', 'Isabella Vazquez', 'Paul Williams', 'Abdullah Alsamahi', 'Jordan Eke',
+    'Deajah Forest',
+  ],
+  '8A': [
+    'Christopher Aguilar-Borrego', 'Wilson Armendariz', 'Jafeth Barahona', 'Armani Carter',
+    'Franciso De La Cruz', 'Makenzie Englebrecht', 'Alfredo Galvan', 'Azrael Harris-Guerra',
+    'Arturo Hernandez', 'Ivyanna Madison', 'Carly Molina', 'Aaron Montanez', 'Allison Olmeda',
+    'Alexis Roman', 'Khyvon Royals', 'Jonathan Tavera', 'Amy Torres', 'Canelo Vasquez',
+    'Evan Varela', 'Mateo Rodriguez',
+  ],
+  '8B': [
+    'Erick Anaya-Jimenz', 'Abigail Arranda-Gomez', 'Brayan Campos-Contreras',
+    'Casye Flores-DeSantiago', 'Sarah Garcia', 'Andres Gonzalez-Laureano', 'Nathan Guitierrez',
+    'Liz Guzman', 'Nathan Madison', 'Dariel Palacios', 'Ariella Pinales', 'Elimar Ramirez',
+    'Edwin Rivera-Vidales', 'Juliebeth Rocha', 'Jacob Rodriguez', 'Dania Terrazas-Areola',
+    'Sophie Triplet', "Sema'J Ward", 'Edgar Rodriguez', 'Amber Costello', 'Lorrion Pearson',
+  ],
 };
 
 function studentId(grade: string, name: string): string {
