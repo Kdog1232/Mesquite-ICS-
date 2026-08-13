@@ -7,7 +7,7 @@ React, TypeScript, and Tailwind CSS.
 
 - The privacy-minimized roster is bundled in `data/students.ts`.
 - React state drives the interface.
-- `localStorage` remembers only each student ID, IN/OUT status, and OUT timestamp.
+- `localStorage` remembers only each student ID and IN/OUT status.
 - Each browser has independent state. There is no synchronization, database,
   authentication, API, or other backend service.
 - Next.js produces a static export suitable for Vercel frontend hosting.
@@ -16,7 +16,6 @@ React, TypeScript, and Tailwind CSS.
 
 ```bash
 npm install
-npm test
 npm run typecheck
 npm run lint
 npm run build
