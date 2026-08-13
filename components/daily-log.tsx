@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { grades } from '@/data/students';
@@ -21,6 +22,7 @@ function downloadCsv(events: HallwayEvent[], filename: string) {
 }
 
 export function DailyLog() {
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
   const [date, setDate] = useState(localDate());
@@ -63,10 +65,15 @@ export function DailyLog() {
     else downloadCsv((data ?? []) as HallwayEvent[], `Mesquite-ICS-Hallway-Log-${startDate}-to-${endDate}.csv`);
   }
 
+  async function signOut() {
+    await supabase?.auth.signOut();
+    router.replace('/');
+  }
+
   if (checking) return <main className="p-10 text-center font-black">CHECKING STAFF ACCESS...</main>;
   if (!session) return <main className="flex min-h-screen items-center justify-center p-4"><div className="rounded-xl bg-white p-8 text-center shadow-card"><p className="text-2xl font-black text-navy">MESQUITE ICS</p><p className="mt-2 font-black text-red-800">STAFF ACCESS REQUIRED</p><Link href="/" className="mt-6 inline-block rounded-lg bg-navy px-5 py-3 font-black text-white">STAFF SIGN IN</Link></div></main>;
   return <main className="mx-auto max-w-7xl p-4 sm:p-6">
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div><p className="text-3xl font-black text-navy">MESQUITE ICS</p><h1 className="font-black tracking-wider text-gold-dark">HALLWAY MONITOR — DAILY LOG</h1></div><div className="flex gap-2"><Link href="/" className="rounded-lg border-2 border-navy px-4 py-2 font-black text-navy">LIVE TRACKER</Link><button onClick={() => void supabase?.auth.signOut()} className="rounded-lg bg-navy px-4 py-2 font-black text-white">SIGN OUT</button></div></div>
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-3"><div><p className="text-3xl font-black text-navy">MESQUITE ICS</p><h1 className="font-black tracking-wider text-gold-dark">HALLWAY MONITOR — DAILY LOG</h1></div><div className="flex gap-2"><Link href="/" className="rounded-lg border-2 border-navy px-4 py-2 font-black text-navy">LIVE TRACKER</Link><button onClick={() => void signOut()} className="rounded-lg bg-navy px-4 py-2 font-black text-white">SIGN OUT</button></div></div>
     <div className="mb-5 grid gap-3 rounded-xl bg-white p-4 shadow-card sm:grid-cols-3"><label className="font-bold">Date<input type="date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 min-h-11 w-full rounded border px-2" /></label><label className="font-bold">Grade<select value={grade} onChange={e => setGrade(e.target.value)} className="mt-1 min-h-11 w-full rounded border px-2"><option>ALL</option>{grades.map(item => <option key={item}>{item}</option>)}</select></label><label className="font-bold">Student search<input type="search" value={query} onChange={e => setQuery(e.target.value)} className="mt-1 min-h-11 w-full rounded border px-2" /></label></div>
     <section className="mb-5 grid gap-3 sm:grid-cols-4">{[['OUT-OF-CLASS EVENTS TODAY', events.length], ['AVERAGE TIME OUT', formatElapsed(average)], ['LONGEST TIME OUT', formatElapsed(longest)], ['CURRENTLY OUT', events.filter(event => !event.in_at).length]].map(([label, value]) => <div key={label} className="rounded-xl bg-navy p-4 text-white"><p className="text-xs font-bold text-slate-300">{label}</p><p className="mt-1 text-2xl font-black">{value}</p></div>)}</section>
     <div className="mb-5 flex flex-wrap items-end gap-3"><button onClick={() => downloadCsv(filtered, `Mesquite-ICS-Hallway-Log-${date}.csv`)} className="min-h-11 rounded-lg bg-emerald-800 px-4 font-black text-white">EXPORT DAILY REPORT</button><label className="font-bold">Start Date<input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="ml-2 min-h-11 rounded border px-2" /></label><label className="font-bold">End Date<input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="ml-2 min-h-11 rounded border px-2" /></label><button onClick={() => void exportRange()} className="min-h-11 rounded-lg bg-navy px-4 font-black text-white">EXPORT DATE RANGE</button></div>
