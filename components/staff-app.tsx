@@ -9,8 +9,7 @@ import { Header } from './header';
 export function StaffApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [campusPassword, setCampusPassword] = useState('');
   const [error, setError] = useState(supabaseConfigurationError ?? '');
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,8 +31,26 @@ export function StaffApp() {
     event.preventDefault();
     if (!supabase) return;
     setSubmitting(true); setError('');
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) setError('STAFF ACCESS REQUIRED');
+    try {
+      const response = await fetch('/api/auth/campus-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campusPassword }),
+      });
+      const result = await response.json() as { accessToken?: string; refreshToken?: string; error?: string };
+      if (!response.ok || !result.accessToken || !result.refreshToken) {
+        setError(result.error ?? 'Unable to sign in. Please try again.');
+      } else {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: result.accessToken,
+          refresh_token: result.refreshToken,
+        });
+        if (sessionError) setError('Unable to sign in. Please try again.');
+        else setCampusPassword('');
+      }
+    } catch {
+      setError('Unable to sign in. Please try again.');
+    }
     setSubmitting(false);
   }
 
@@ -48,10 +65,10 @@ export function StaffApp() {
       <form onSubmit={signIn} className="w-full max-w-md rounded-2xl bg-white p-8 shadow-card">
         <p className="text-3xl font-black text-navy">MESQUITE ICS</p>
         <h1 className="mt-1 text-lg font-black tracking-widest text-gold-dark">STAFF ACCESS</h1>
-        <label className="mt-8 block font-bold">Staff Email<input required type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 min-h-12 w-full rounded-lg border px-3 font-normal" /></label>
-        <label className="mt-4 block font-bold">Password<input required type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-2 min-h-12 w-full rounded-lg border px-3 font-normal" /></label>
+        <p className="mt-6 text-slate-700">Enter the campus password provided by administration to access the live Hallway Monitor.</p>
+        <label className="mt-6 block font-bold">Campus Password<input required type="password" autoComplete="current-password" value={campusPassword} onChange={(e) => setCampusPassword(e.target.value)} className="mt-2 min-h-12 w-full rounded-lg border px-3 font-normal" /></label>
         {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 font-bold text-red-800">{error}</p>}
-        <button disabled={submitting || !supabase} className="mt-6 min-h-12 w-full rounded-lg bg-navy font-black text-white disabled:opacity-50">{submitting ? 'SIGNING IN...' : 'SIGN IN'}</button>
+        <button disabled={submitting || !supabase} className="mt-6 min-h-12 w-full rounded-lg bg-navy font-black text-white disabled:opacity-50">{submitting ? 'ENTERING...' : 'ENTER HALLWAY MONITOR'}</button>
       </form>
     </main>
   );
