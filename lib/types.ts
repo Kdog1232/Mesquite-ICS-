@@ -1,6 +1,9 @@
-export type Role = 'STAFF' | 'ADMIN';
-export type StatusValue = 'IN' | 'OUT';
-export interface StudentStatus { student_id:string; status:StatusValue; out_since:string|null; updated_at:string; updated_by:string|null }
-export interface Student { id:string; first_name:string; last_name:string; grade:string; section:string; active:boolean; student_status:StudentStatus|null }
-export interface Visit { id:string; student_id:string; out_at:string; in_at:string|null; duration_minutes:number|null; students:Pick<Student,'first_name'|'last_name'|'grade'|'section'> }
+import type { Database } from './database.types';
+
+export type Role = Database['public']['Enums']['staff_role'];
+export type StatusValue = Database['public']['Enums']['student_presence'];
+export type StudentStatus = Database['public']['Tables']['student_status']['Row'];
+export type Student = Pick<Database['public']['Tables']['students']['Row'], 'id' | 'first_name' | 'last_name' | 'grade' | 'section' | 'active'> & {
+  student_status: StudentStatus | null;
+};
 export const GRADES=['PK','K','1','2','3','4','5','6','7','8','9','10','11','12'] as const;
