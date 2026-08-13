@@ -1,0 +1,6 @@
+/** Convert an Excel workbook to the privacy-minimized CSV accepted by Supabase. Run: npx tsx scripts/import-roster.ts roster.xlsx > roster.csv */
+import * as XLSX from 'xlsx';
+const file=process.argv[2];if(!file)throw new Error('Provide an .xlsx path');
+const wb=XLSX.readFile(file);const aliases:Record<string,string>={PREK:'PK',KINDER:'K','1ST':'1','4TH':'4','9TH':'9','10TH':'10','11TH':'11','12TH':'12'};
+const quote=(v:string)=>`"${v.replaceAll('"','""')}"`;console.log('first_name,last_name,grade,section');
+for(const sheet of wb.SheetNames){const token=sheet.trim().toUpperCase();const match=token.match(/^(\d{1,2})([A-Z])?$/);const grade=aliases[token]??match?.[1];if(!grade||!['PK','K',...Array.from({length:12},(_,i)=>String(i+1))].includes(grade))continue;const section=match?.[2]?`${grade}${match[2]}`:token==='PREK'?'PreK':token==='KINDER'?'Kinder':sheet.trim();const rows=XLSX.utils.sheet_to_json<Record<string,unknown>>(wb.Sheets[sheet],{defval:''});for(const row of rows){const find=(names:string[])=>{const key=Object.keys(row).find(k=>names.includes(k.trim().toLowerCase()));return key?String(row[key]).trim():''};const first=find(['first name','first_name','firstname','first']),last=find(['last name','last_name','lastname','last']);if(first&&last)console.log([first,last,grade,section].map(quote).join(','));}}

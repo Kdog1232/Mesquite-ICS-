@@ -1,0 +1,2 @@
+import {describe,expect,it} from 'vitest';import {isPriorDay,minutesOut} from '@/lib/time';
+describe('status timing',()=>{it('calculates completed elapsed minutes',()=>expect(minutesOut('2025-01-01T10:00:00Z',Date.parse('2025-01-01T10:07:59Z'))).toBe(7));it('never returns negative time',()=>expect(minutesOut('2025-01-01T11:00:00Z',Date.parse('2025-01-01T10:00:00Z'))).toBe(0));it('detects prior-day stale state',()=>expect(isPriorDay('2025-01-01T23:59:00Z',new Date('2025-01-02T10:00:00Z'))).toBe(true))});
