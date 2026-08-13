@@ -7,6 +7,7 @@ import { StudentCard } from './student-card';
 export type StudentStatus = 'IN' | 'OUT';
 type Statuses = Record<string, StudentStatus>;
 type View = 'ALL' | 'OUT' | (typeof grades)[number];
+type Section = 'ALL' | '6A' | '6B' | '8A' | '8B';
 
 const storageKey = 'mesquite-ics-student-statuses';
 
@@ -30,6 +31,7 @@ export function Dashboard() {
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<View>('PK');
   const [query, setQuery] = useState('');
+  const [section, setSection] = useState<Section>('ALL');
 
   useEffect(() => {
     setStatuses(readStatuses());
@@ -46,11 +48,13 @@ export function Dashboard() {
         ? students.filter((student) => statusFor(student.id) === 'OUT')
         : view === 'ALL'
           ? students
-          : students.filter((student) => student.grade === view);
+          : students.filter(
+              (student) => student.grade === view && (section === 'ALL' || student.section === section),
+            );
 
     return [...result].sort((a, b) => a.name.localeCompare(b.name));
   // statuses must refresh the currently-out view.
-  }, [query, statuses, view]);
+  }, [query, section, statuses, view]);
 
   function toggle(id: string) {
     setStatuses((current) => {
@@ -63,6 +67,7 @@ export function Dashboard() {
   function select(next: View) {
     setView(next);
     setQuery('');
+    setSection('ALL');
   }
 
   const title = query
@@ -101,6 +106,20 @@ export function Dashboard() {
           ))}
         </div>
       </nav>
+
+      {(view === '6' || view === '8') && !query && (
+        <nav aria-label={`Filter Grade ${view} by section`} className="mb-6 flex gap-2">
+          {(['ALL', `${view}A`, `${view}B`] as Section[]).map((option) => (
+            <button
+              key={option}
+              onClick={() => setSection(option)}
+              className={`grade-button min-w-20 ${section === option ? 'grade-button-active' : ''}`}
+            >
+              {option}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-black text-navy">{title} — {visible.length}</h1>
