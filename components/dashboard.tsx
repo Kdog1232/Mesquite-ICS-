@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { PostgrestError, RealtimeChannel, RealtimePostgresChangesPayload, Session } from '@supabase/supabase-js';
 import { grades, students, type Student } from '@/data/students';
 import { supabase } from '@/lib/supabase';
 import { StudentCard } from './student-card';
@@ -15,6 +15,7 @@ type Statuses = Record<string, LiveStatus>;
 type View = 'ALL' | 'OUT' | (typeof grades)[number];
 type Section = 'ALL' | '6A' | '6B' | '8A' | '8B';
 type ConnectionState = 'connecting' | 'connected' | 'offline';
+type LoadError = 'auth' | 'schema' | 'permission' | 'connection' | null;
 
 const RECONNECT_DELAY_MS = 3_000;
 const OFFLINE_AFTER_MS = 10_000;
@@ -25,6 +26,14 @@ function validRow(value: unknown): value is StatusRow {
   return typeof row.student_id === 'string' && (row.status === 'IN' || row.status === 'OUT') && (row.destination === null || isDestination(row.destination)) && typeof row.updated_at === 'string';
 }
 
+function classifyQueryError(error: PostgrestError, hasSession: boolean): Exclude<LoadError, null> {
+  const detail = `${error.code} ${error.message} ${error.details ?? ''} ${error.hint ?? ''}`.toLowerCase();
+  if (error.code === '42703' || error.code === 'PGRST204' || detail.includes('column') && detail.includes('destination')) return 'schema';
+  if (!hasSession || error.code === 'PGRST301' || detail.includes('jwt') || detail.includes('unauthorized')) return 'auth';
+  if (error.code === '42501' || detail.includes('permission denied') || detail.includes('row-level security')) return 'permission';
+  return 'connection';
+}
+
 export function formatElapsed(seconds: number) {
   const safe = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(safe / 3600);
@@ -33,9 +42,11 @@ export function formatElapsed(seconds: number) {
   return hours ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}` : `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
 
-export function Dashboard() {
+export function Dashboard({ session }: { session: Session }) {
   const [statuses, setStatuses] = useState<Statuses>({});
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadError, setLoadError] = useState<LoadError>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
   const [updating, setUpdating] = useState<Set<string>>(new Set());
   const [updateError, setUpdateError] = useState('');
@@ -47,11 +58,35 @@ export function Dashboard() {
 
   const applyRows = useCallback((rows: StatusRow[]) => setStatuses(Object.fromEntries(rows.filter(validRow).map(row => [row.student_id, { status: row.status, destination: row.destination, outAt: row.out_at, updatedAt: row.updated_at }]))), []);
   const refetch = useCallback(async () => {
-    if (!supabase) { setLoadState('error'); return false; }
+    if (!supabase) { setLoadError('connection'); setLoadState('error'); return false; }
     const { data, error } = await supabase.from('student_status').select('student_id,status,destination,out_at,updated_at');
-    if (error) { setLoadState('error'); return false; }
-    applyRows((data ?? []) as StatusRow[]); setLoadState('ready'); return true;
-  }, [applyRows]);
+    if (error) {
+      const kind = classifyQueryError(error, Boolean(session));
+      console.error('Supabase query failed', { operation: 'student_status.select', code: error.code, message: error.message, kind });
+      setLoadError(kind); setLoadState('error'); return false;
+    }
+    applyRows((data ?? []) as StatusRow[]); setLoadError(null); setLoadState('ready'); return true;
+  }, [applyRows, session]);
+
+  const retry = useCallback(async () => {
+    if (!supabase) return;
+    setLoadState('loading');
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session) {
+      console.error('Supabase session verification failed', { operation: 'auth.getSession', message: error?.message ?? 'No session returned' });
+      setLoadError('auth'); setLoadState('error'); return;
+    }
+    const expiresSoon = typeof data.session.expires_at === 'number' && data.session.expires_at * 1000 <= Date.now() + 60_000;
+    if (expiresSoon) {
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        console.error('Supabase session refresh failed', { operation: 'auth.refreshSession', message: refreshError.message });
+        setLoadError('auth'); setLoadState('error'); return;
+      }
+    }
+    setReconnectAttempt(value => value + 1);
+    await refetch();
+  }, [refetch]);
 
   useEffect(() => { void refetch(); }, [refetch]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
@@ -123,7 +158,7 @@ export function Dashboard() {
       channel = null;
       if (activeChannel) void client.removeChannel(activeChannel);
     };
-  }, [refetch]);
+  }, [reconnectAttempt, refetch]);
 
   const statusFor = useCallback((id: string): LiveStatus => statuses[id] ?? { status: 'IN', destination: null, outAt: null, updatedAt: '' }, [statuses]);
   const elapsedFor = useCallback((id: string) => { const start = statusFor(id).outAt; return start ? Math.max(0, (now - new Date(start).getTime()) / 1000) : 0; }, [now, statusFor]);
@@ -144,7 +179,10 @@ export function Dashboard() {
     const next = destination ? 'OUT' : 'IN';
     setUpdating(current => new Set(current).add(student.id)); setUpdateError('');
     const { error } = await supabase.rpc('set_student_hallway_status', { p_student_id: student.id, p_status: next, p_destination: destination, p_student_name: student.name, p_grade: student.grade, p_section: student.section ?? null });
-    if (error) setUpdateError('Unable to update live status. Please try again.');
+    if (error) {
+      console.error('Supabase RPC failed', { operation: 'set_student_hallway_status', code: error.code, message: error.message });
+      setUpdateError(error.code === 'PGRST202' ? 'DATABASE UPDATE REQUIRED' : 'Unable to update live status. Please try again.');
+    }
     else await refetch();
     setUpdating(current => { const copy = new Set(current); copy.delete(student.id); return copy; });
   }
@@ -161,7 +199,16 @@ export function Dashboard() {
   function select(next: View) { setView(next); setQuery(''); setSection('ALL'); }
 
   if (loadState === 'loading') return <main className="mx-auto max-w-6xl p-8 text-center text-xl font-black text-navy">SYNCING LIVE CAMPUS STATUS...</main>;
-  if (loadState === 'error') return <main className="mx-auto max-w-6xl p-8 text-center"><p className="text-2xl font-black text-red-800">LIVE STATUS UNAVAILABLE</p><p className="mt-2 font-bold">STAFF ACCESS REQUIRED</p><button onClick={() => { setLoadState('loading'); void refetch(); }} className="mt-6 rounded-lg bg-navy px-5 py-3 font-black text-white">RETRY</button></main>;
+  if (loadState === 'error') {
+    const copy = loadError === 'auth'
+      ? ['LIVE STATUS UNAVAILABLE', 'STAFF ACCESS REQUIRED']
+      : loadError === 'schema'
+        ? ['DATABASE UPDATE REQUIRED', 'The hallway destination migration must be applied.']
+        : loadError === 'permission'
+          ? ['LIVE STATUS TEMPORARILY UNAVAILABLE', 'DATABASE PERMISSION ERROR']
+          : ['LIVE STATUS TEMPORARILY UNAVAILABLE', 'Unable to reach live campus status.'];
+    return <main className="mx-auto max-w-6xl p-8 text-center"><p className="text-2xl font-black text-red-800">{copy[0]}</p><p className="mt-2 font-bold">{copy[1]}</p><button onClick={() => void retry()} className="mt-6 rounded-lg bg-navy px-5 py-3 font-black text-white">RETRY</button></main>;
+  }
   const title = query ? 'Search Results' : view === 'OUT' ? 'Currently Out' : view === 'ALL' ? 'All Students' : `Grade ${view}`;
   const connectionIndicator = connectionState === 'connected'
     ? { className: 'bg-emerald-100 text-emerald-900', label: 'LIVE CAMPUS STATUS ●' }
