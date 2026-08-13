@@ -15,16 +15,24 @@ export function StaffApp() {
 
   useEffect(() => {
     if (!supabase) { setChecking(false); return; }
+    let active = true;
     void supabase.auth.getSession().then(({ data, error: sessionError }) => {
-      if (sessionError) setError('STAFF ACCESS REQUIRED');
+      if (!active) return;
+      if (sessionError) {
+        console.error('Supabase session initialization failed', { operation: 'auth.getSession', message: sessionError.message });
+        setError('STAFF ACCESS REQUIRED');
+      }
       setSession(data.session);
       setChecking(false);
     });
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return;
+      // INITIAL_SESSION and TOKEN_REFRESHED are both authoritative session
+      // updates. Realtime channel state is deliberately not used for auth.
       setSession(nextSession);
       setChecking(false);
     });
-    return () => data.subscription.unsubscribe();
+    return () => { active = false; data.subscription.unsubscribe(); };
   }, []);
 
   async function signIn(event: React.FormEvent) {
@@ -41,12 +49,18 @@ export function StaffApp() {
       if (!response.ok || !result.accessToken || !result.refreshToken) {
         setError(result.error ?? 'Unable to sign in. Please try again.');
       } else {
-        const { error: sessionError } = await supabase.auth.setSession({
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
           access_token: result.accessToken,
           refresh_token: result.refreshToken,
         });
-        if (sessionError) setError('Unable to sign in. Please try again.');
-        else setCampusPassword('');
+        if (sessionError || !sessionData.session) setError('Unable to sign in. Please try again.');
+        else {
+          // Do not render Dashboard until setSession has installed and returned
+          // the authenticated browser session.
+          const { data: verification, error: verificationError } = await supabase.auth.getSession();
+          if (verificationError || !verification.session) setError('Unable to sign in. Please try again.');
+          else { setSession(verification.session); setCampusPassword(''); }
+        }
       }
     } catch {
       setError('Unable to sign in. Please try again.');
@@ -73,5 +87,5 @@ export function StaffApp() {
     </main>
   );
 
-  return <><Header onSignOut={signOut} /><Dashboard /></>;
+  return <><Header onSignOut={signOut} /><Dashboard session={session} /></>;
 }
