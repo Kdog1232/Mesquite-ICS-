@@ -103,6 +103,32 @@ const roster: Roster = {
     'Edwin Rivera-Vidales', 'Juliebeth Rocha', 'Jacob Rodriguez', 'Dania Terrazas-Areola',
     'Sophie Triplet', "Sema'J Ward", 'Edgar Rodriguez', 'Amber Costello', 'Lorrion Pearson',
   ],
+  '9': [
+    'Emily Alderete', 'Anthony Aranda-Gomez', 'Daniel Benitez', 'Keyla Brito-Morales',
+    'Kyrah Brown', 'Camila Campos-Herrera', 'Israel Coria', 'Ayleen Gomez', 'Diego Gonon',
+    'Kevin Gonzalez', 'Ryan Mendoza', 'Jayden Morales Alvarenga', 'Alec Ortega',
+    'Genaro Santiago', 'Aaron Trejo', 'Cristopher Yanez Jasso', 'Yulisa Valentin Corona',
+    'Louis Rogers', 'Kendalynn Cameron',
+  ],
+  '10': [
+    'Angel Aguilar', 'Eva Alvarez', 'Dayanara Antunez', 'Narely Barrientos',
+    'Alfonso Camacho Ibarra', 'Angel Campos', 'Kimberly De La Cruz', 'Kamiyah Dixson',
+    'Kendall Dixson', 'Jayden Galindo', 'Julianna Galvan', 'Isis Garcia', 'Jazmin Gonon',
+    'Adrian Houston', 'Alexa Jackson', 'Tyla Johnson', 'Jerome Madison', 'Israel Negrete',
+    'Justin Ornelas', 'Jayden Ramirez', 'Damian Reyna Zavala', 'Alexander Rojas',
+    'Joshua Sabin', 'Preston Sosa', 'Nicolas Ulloa', 'Esmeralda Sierra',
+  ],
+  '11': [
+    'Alex Acosta Matthews', 'Billy Andablo', 'Jair Antunez', 'Luis Aragones',
+    'Justin Arriaga', 'Joshua Gomez', "Qua'Sean Ward", 'Susana Padron', 'Angel Moore',
+  ],
+  '12': [
+    'Paulo Aguilar', 'Alexis Alderete', 'Yareli Alderete', 'Alan Alonso', 'Haydy Alvarenga',
+    'Stephanie Arias', 'Marilyn Cantu', 'Seth Clement', 'Cohen Engelbrecht',
+    'Uriel Flores DeSantiago', 'Aleisha Gomez', 'Vanecia Lesher', 'Diana Novas',
+    'Emily Peraza', 'Saige Reid', 'Kendra Rojas', "Da'Metrias Shed", 'Issac Terron',
+    'Cordell Henderson',
+  ],
 };
 
 function studentId(grade: string, name: string): string {
@@ -115,8 +141,8 @@ function studentId(grade: string, name: string): string {
 
 /** Local, frontend-only student roster. */
 export const students: Student[] = Object.entries(roster).flatMap(([group, names]) => {
-  const grade = group.charAt(0);
-  const section = group.length > 1 ? group : undefined;
+  const section = group.endsWith('A') || group.endsWith('B') ? group : undefined;
+  const grade = section ? group.charAt(0) : group;
 
   return names.map((name) => ({
     id: studentId(grade, name),
