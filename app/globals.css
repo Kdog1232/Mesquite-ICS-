@@ -1,2 +1,3 @@
 @tailwind base;@tailwind components;@tailwind utilities;
 body{@apply bg-canvas text-slate-900 antialiased}button,input,select{@apply focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-gold/40}
+@layer components{.grade-button{@apply min-h-14 rounded-lg bg-slate-100 px-3 text-lg font-black transition hover:bg-slate-200}.grade-button-active{@apply bg-navy text-white hover:bg-navy}}
