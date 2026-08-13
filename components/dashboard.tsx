@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { grades, students, type Student } from '@/data/students';
 import { supabase } from '@/lib/supabase';
 import { StudentCard } from './student-card';
@@ -12,6 +12,10 @@ type StatusRow = { student_id: string; status: StudentStatus; out_at: string | n
 type Statuses = Record<string, LiveStatus>;
 type View = 'ALL' | 'OUT' | (typeof grades)[number];
 type Section = 'ALL' | '6A' | '6B' | '8A' | '8B';
+type ConnectionState = 'connecting' | 'connected' | 'offline';
+
+const RECONNECT_DELAY_MS = 3_000;
+const OFFLINE_AFTER_MS = 10_000;
 
 function validRow(value: unknown): value is StatusRow {
   if (!value || typeof value !== 'object') return false;
@@ -30,8 +34,7 @@ export function formatElapsed(seconds: number) {
 export function Dashboard() {
   const [statuses, setStatuses] = useState<Statuses>({});
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [connected, setConnected] = useState(false);
-  const [reconnect, setReconnect] = useState(0);
+  const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
   const [updating, setUpdating] = useState<Set<string>>(new Set());
   const [updateError, setUpdateError] = useState('');
   const [now, setNow] = useState(() => Date.now());
@@ -50,25 +53,74 @@ export function Dashboard() {
   useEffect(() => { void refetch(); }, [refetch]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => {
-    if (!supabase || loadState === 'error') return;
+    if (!supabase) { setConnectionState('offline'); return; }
     const client = supabase;
+    let channel: RealtimeChannel | null = null;
+    let reconnectTimer: number | undefined;
+    let offlineTimer: number | undefined;
+    let stopped = false;
+    let connectionFailedLongEnough = false;
+
     const receive = (payload: RealtimePostgresChangesPayload<StatusRow>) => {
       if (!validRow(payload.new)) return;
       const row = payload.new;
       setStatuses(current => ({ ...current, [row.student_id]: { status: row.status, outAt: row.out_at, updatedAt: row.updated_at } }));
     };
-    const channel = client.channel(`campus-status-${reconnect}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'student_status' }, receive)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'student_status' }, receive)
-      .subscribe(status => {
-        if (status === 'SUBSCRIBED') { setConnected(true); void refetch(); }
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          setConnected(false);
-          window.setTimeout(() => setReconnect(value => value + 1), 3000);
+
+    const clearReconnectTimers = () => {
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      if (offlineTimer !== undefined) window.clearTimeout(offlineTimer);
+      reconnectTimer = undefined;
+      offlineTimer = undefined;
+    };
+
+    const connect = () => {
+      if (stopped) return;
+      if (!connectionFailedLongEnough) setConnectionState('connecting');
+      const nextChannel = client.channel('campus-status')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'student_status' }, receive)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'student_status' }, receive);
+      channel = nextChannel;
+      nextChannel.subscribe(status => {
+        if (stopped || channel !== nextChannel) return;
+        if (status === 'SUBSCRIBED') {
+          clearReconnectTimers();
+          connectionFailedLongEnough = false;
+          setConnectionState('connected');
+          void refetch();
+          return;
+        }
+        if (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT' && status !== 'CLOSED') return;
+
+        if (!connectionFailedLongEnough) setConnectionState('connecting');
+        if (offlineTimer === undefined) {
+          offlineTimer = window.setTimeout(() => {
+            if (!stopped) {
+              connectionFailedLongEnough = true;
+              setConnectionState('offline');
+            }
+          }, OFFLINE_AFTER_MS);
+        }
+        if (reconnectTimer === undefined) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = undefined;
+            if (stopped || channel !== nextChannel) return;
+            channel = null;
+            void client.removeChannel(nextChannel).finally(connect);
+          }, RECONNECT_DELAY_MS);
         }
       });
-    return () => { setConnected(false); void client.removeChannel(channel); };
-  }, [loadState, reconnect, refetch]);
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      clearReconnectTimers();
+      const activeChannel = channel;
+      channel = null;
+      if (activeChannel) void client.removeChannel(activeChannel);
+    };
+  }, [refetch]);
 
   const statusFor = useCallback((id: string): LiveStatus => statuses[id] ?? { status: 'IN', outAt: null, updatedAt: '' }, [statuses]);
   const elapsedFor = useCallback((id: string) => { const start = statusFor(id).outAt; return start ? Math.max(0, (now - new Date(start).getTime()) / 1000) : 0; }, [now, statusFor]);
@@ -95,8 +147,13 @@ export function Dashboard() {
   if (loadState === 'loading') return <main className="mx-auto max-w-6xl p-8 text-center text-xl font-black text-navy">SYNCING LIVE CAMPUS STATUS...</main>;
   if (loadState === 'error') return <main className="mx-auto max-w-6xl p-8 text-center"><p className="text-2xl font-black text-red-800">LIVE STATUS UNAVAILABLE</p><p className="mt-2 font-bold">STAFF ACCESS REQUIRED</p><button onClick={() => { setLoadState('loading'); void refetch(); }} className="mt-6 rounded-lg bg-navy px-5 py-3 font-black text-white">RETRY</button></main>;
   const title = query ? 'Search Results' : view === 'OUT' ? 'Currently Out' : view === 'ALL' ? 'All Students' : `Grade ${view}`;
+  const connectionIndicator = connectionState === 'connected'
+    ? { className: 'bg-emerald-100 text-emerald-900', label: 'LIVE CAMPUS STATUS ●' }
+    : connectionState === 'connecting'
+      ? { className: 'bg-amber-100 text-amber-900', label: 'RECONNECTING... ●' }
+      : { className: 'bg-red-100 text-red-900', label: 'CAMPUS STATUS OFFLINE ●' };
   return <main className="mx-auto max-w-6xl p-4 sm:p-6">
-    <div className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-black ${connected ? 'bg-emerald-100 text-emerald-900' : 'bg-red-100 text-red-900'}`}>{connected ? 'LIVE CAMPUS STATUS ●' : 'LIVE CONNECTION LOST'}</div>
+    <div role="status" aria-live="polite" className={`mb-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-black ${connectionIndicator.className}`}>{connectionIndicator.label}</div>
     {updateError && <p role="alert" className="mb-4 rounded-lg bg-red-100 p-4 font-black text-red-900">{updateError}</p>}
     <div className="mb-5 grid gap-3 md:grid-cols-[1fr_auto]"><label><span className="sr-only">Search student</span><input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search Student..." className="min-h-14 w-full rounded-xl border border-slate-300 bg-white px-5 text-lg shadow-sm" /></label><button onClick={() => select('OUT')} className="min-h-14 rounded-xl bg-red-700 px-7 text-lg font-black text-white shadow-md">CURRENTLY OUT: {outCount}</button></div>
     <nav aria-label="Select grade" className="mb-6 rounded-xl bg-white p-4 shadow-card"><div className="grid grid-cols-4 gap-2 sm:grid-cols-8"><button onClick={() => select('ALL')} className={`grade-button ${view === 'ALL' ? 'grade-button-active' : ''}`}>ALL</button>{grades.map(grade => <button key={grade} onClick={() => select(grade)} className={`grade-button ${view === grade ? 'grade-button-active' : ''}`}>{grade}</button>)}</div></nav>
