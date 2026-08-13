@@ -1,0 +1,2 @@
+@tailwind base;@tailwind components;@tailwind utilities;
+body{@apply bg-canvas text-slate-900 antialiased}button,input,select{@apply focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-gold/40}
