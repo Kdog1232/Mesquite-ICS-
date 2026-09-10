@@ -108,7 +108,8 @@ const roster: Roster = {
     'Kyrah Brown', 'Camila Campos-Herrera', 'Israel Coria', 'Ayleen Gomez', 'Diego Gonon',
     'Kevin Gonzalez', 'Ryan Mendoza', 'Jayden Morales Alvarenga', 'Alec Ortega',
     'Genaro Santiago', 'Aaron Trejo', 'Cristopher Yanez Jasso', 'Yulisa Valentin Corona',
-    'Louis Rogers', 'Kendalynn Cameron',
+    'Louis Rogers', 'Kendalynn Cameron', 'Fernando Escalera', 'Christian Cyrus',
+    'Jayden Trimble',
   ],
   '10': [
     'Angel Aguilar', 'Eva Alvarez', 'Dayanara Antunez', 'Narely Barrientos',
@@ -116,11 +117,12 @@ const roster: Roster = {
     'Kendall Dixson', 'Jayden Galindo', 'Julianna Galvan', 'Isis Garcia', 'Jazmin Gonon',
     'Adrian Houston', 'Alexa Jackson', 'Tyla Johnson', 'Jerome Madison', 'Israel Negrete',
     'Justin Ornelas', 'Jayden Ramirez', 'Damian Reyna Zavala', 'Alexander Rojas',
-    'Joshua Sabin', 'Preston Sosa', 'Nicolas Ulloa', 'Esmeralda Sierra',
+    'Joshua Sabin', 'Preston Sosa', 'Nicolas Ulloa', 'Esmeralda Sierra', 'Michael Lesher',
   ],
   '11': [
     'Alex Acosta Matthews', 'Billy Andablo', 'Jair Antunez', 'Luis Aragones',
     'Justin Arriaga', 'Joshua Gomez', "Qua'Sean Ward", 'Susana Padron', 'Angel Moore',
+    'Jimaya Robertson',
   ],
   '12': [
     'Paulo Aguilar', 'Alexis Alderete', 'Yareli Alderete', 'Alan Alonso', 'Haydy Alvarenga',
